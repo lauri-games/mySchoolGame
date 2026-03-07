@@ -6,6 +6,7 @@
 const World = (() => {
   let wallMeshes = [];
   let hideMeshes = [];
+  let furnitureMeshes = [];
   let stairMesh  = null;
   let floorMesh  = null;
   let ceilingMesh = null;
@@ -42,6 +43,7 @@ const World = (() => {
   function clear(scene) {
     wallMeshes.forEach(m => scene.remove(m));
     hideMeshes.forEach(m => scene.remove(m));
+    furnitureMeshes.forEach(m => scene.remove(m));
     if (stairMesh) scene.remove(stairMesh);
     if (floorMesh) scene.remove(floorMesh);
     if (ceilingMesh) scene.remove(ceilingMesh);
@@ -49,11 +51,28 @@ const World = (() => {
 
     wallMeshes = [];
     hideMeshes = [];
+    furnitureMeshes = [];
     stairMesh  = null;
     floorMesh  = null;
     ceilingMesh = null;
     lights     = [];
   }
+
+  // ── Classroom furniture meshes (tracked for cleanup) ─────────────────────
+
+  // ── Room definitions: 6 classrooms, each with a colour + bounds ───────────
+  // col/row ranges are the INTERIOR walkable cells (walls are at the boundary)
+  // Colours: each room gets a cheerful accent colour for its inner wall panels
+  const ROOM_DEFS = [
+    // upper row of classrooms
+    { id:'UL', colMin:1,  colMax:7,  rowMin:3, rowMax:7, wallColor:0xff8a80, floorColor:0xf5deb3 }, // red/salmon
+    { id:'UM', colMin:12, colMax:19, rowMin:3, rowMax:7, wallColor:0x80cbc4, floorColor:0xf5deb3 }, // teal
+    { id:'UR', colMin:24, colMax:30, rowMin:3, rowMax:7, wallColor:0xffcc80, floorColor:0xf5deb3 }, // orange
+    // lower row of classrooms
+    { id:'LL', colMin:1,  colMax:7,  rowMin:12, rowMax:16, wallColor:0xce93d8, floorColor:0xf5deb3 }, // purple
+    { id:'LM', colMin:12, colMax:19, rowMin:12, rowMax:16, wallColor:0xa5d6a7, floorColor:0xf5deb3 }, // green
+    { id:'LR', colMin:24, colMax:30, rowMin:12, rowMax:16, wallColor:0x90caf9, floorColor:0xf5deb3 }, // blue
+  ];
 
   // ── helpers ──────────────────────────────────────────────────────────────
 
@@ -140,6 +159,175 @@ const World = (() => {
   }
 
   // ── build ─────────────────────────────────────────────────────────────────
+
+  /** Paint coloured wall panels on the inner faces of classroom walls */
+  function addRoomWallPanels(scene, room) {
+    const mat = new THREE.MeshLambertMaterial({ color: room.wallColor });
+    // Panel dimensions
+    const panelH = WALL_HEIGHT * 0.55;  // lower half of the wall
+    const panelY = panelH / 2 + 0.02;
+    const thickness = 0.04;
+
+    const x0 = room.colMin * TILE3D;          // west inner face X
+    const x1 = (room.colMax + 1) * TILE3D;    // east inner face X
+    const z0 = room.rowMin * TILE3D;           // north inner face Z
+    const z1 = (room.rowMax + 1) * TILE3D;     // south inner face Z
+    const roomW = x1 - x0;
+    const roomD = z1 - z0;
+
+    // North inner wall panel
+    const nGeo = new THREE.BoxGeometry(roomW, panelH, thickness);
+    const nMesh = new THREE.Mesh(nGeo, mat);
+    nMesh.position.set((x0 + x1) / 2, panelY, z0 + thickness / 2);
+    scene.add(nMesh); furnitureMeshes.push(nMesh);
+
+    // South inner wall panel
+    const sGeo = new THREE.BoxGeometry(roomW, panelH, thickness);
+    const sMesh = new THREE.Mesh(sGeo, mat);
+    sMesh.position.set((x0 + x1) / 2, panelY, z1 - thickness / 2);
+    scene.add(sMesh); furnitureMeshes.push(sMesh);
+
+    // West inner wall panel
+    const wGeo = new THREE.BoxGeometry(thickness, panelH, roomD);
+    const wMesh = new THREE.Mesh(wGeo, mat);
+    wMesh.position.set(x0 + thickness / 2, panelY, (z0 + z1) / 2);
+    scene.add(wMesh); furnitureMeshes.push(wMesh);
+
+    // East inner wall panel
+    const eGeo = new THREE.BoxGeometry(thickness, panelH, roomD);
+    const eMesh = new THREE.Mesh(eGeo, mat);
+    eMesh.position.set(x1 - thickness / 2, panelY, (z0 + z1) / 2);
+    scene.add(eMesh); furnitureMeshes.push(eMesh);
+  }
+
+  /** Add a blackboard / whiteboard on the north wall inside the room */
+  function addBlackboard(scene, room) {
+    const bW = TILE3D * 2.2;
+    const bH = WALL_HEIGHT * 0.38;
+    const bGeo = new THREE.BoxGeometry(bW, bH, 0.06);
+    const bMat = new THREE.MeshLambertMaterial({ color: 0x1b5e20 }); // dark green board
+    const board = new THREE.Mesh(bGeo, bMat);
+
+    const cx = ((room.colMin + room.colMax + 1) / 2) * TILE3D;
+    const z  = room.rowMin * TILE3D + 0.15;
+    board.position.set(cx, WALL_HEIGHT * 0.65, z);
+    scene.add(board); furnitureMeshes.push(board);
+
+    // White chalk lines (thin strips)
+    const lineMat = new THREE.MeshLambertMaterial({ color: 0xf5f5f5 });
+    for (let i = 0; i < 3; i++) {
+      const lGeo = new THREE.BoxGeometry(bW * 0.82, 0.025, 0.07);
+      const lMesh = new THREE.Mesh(lGeo, lineMat);
+      lMesh.position.set(cx, WALL_HEIGHT * 0.55 + i * 0.13, z);
+      scene.add(lMesh); furnitureMeshes.push(lMesh);
+    }
+
+    // Board frame (dark wood)
+    const frameMat = new THREE.MeshLambertMaterial({ color: 0x5d4037 });
+    const topBot = new THREE.BoxGeometry(bW + 0.06, 0.05, 0.08);
+    const sides  = new THREE.BoxGeometry(0.05, bH + 0.06, 0.08);
+    const top  = new THREE.Mesh(topBot, frameMat);
+    const bot  = new THREE.Mesh(topBot.clone(), frameMat);
+    const lft  = new THREE.Mesh(sides, frameMat);
+    const rgt  = new THREE.Mesh(sides.clone(), frameMat);
+    top.position.set(cx, WALL_HEIGHT * 0.65 + bH / 2, z);
+    bot.position.set(cx, WALL_HEIGHT * 0.65 - bH / 2, z);
+    lft.position.set(cx - bW / 2, WALL_HEIGHT * 0.65, z);
+    rgt.position.set(cx + bW / 2, WALL_HEIGHT * 0.65, z);
+    [top,bot,lft,rgt].forEach(m => { scene.add(m); furnitureMeshes.push(m); });
+  }
+
+  /** Add teacher's desk at the front of the room */
+  function addTeacherDesk(scene, room) {
+    const cx = ((room.colMin + room.colMax + 1) / 2) * TILE3D;
+    const z  = room.rowMin * TILE3D + TILE3D * 1.1;
+
+    // Desk top
+    const dtGeo = new THREE.BoxGeometry(TILE3D * 1.0, 0.08, TILE3D * 0.55);
+    const dtMat = new THREE.MeshLambertMaterial({ color: 0x8d6e63 });
+    const dt = new THREE.Mesh(dtGeo, dtMat);
+    dt.position.set(cx, 0.72, z);
+    scene.add(dt); furnitureMeshes.push(dt);
+
+    // Desk body
+    const dbGeo = new THREE.BoxGeometry(TILE3D * 1.0, 0.70, TILE3D * 0.50);
+    const db = new THREE.Mesh(dbGeo, dtMat);
+    db.position.set(cx, 0.36, z);
+    scene.add(db); furnitureMeshes.push(db);
+
+    // Teacher's chair
+    addChair(scene, cx + TILE3D * 0.0, z + TILE3D * 0.45, 0x5d4037);
+  }
+
+  /** Add a simple chair */
+  function addChair(scene, x, z, color) {
+    const mat = new THREE.MeshLambertMaterial({ color });
+    // seat
+    const sGeo = new THREE.BoxGeometry(0.38, 0.05, 0.36);
+    const seat = new THREE.Mesh(sGeo, mat);
+    seat.position.set(x, 0.44, z);
+    scene.add(seat); furnitureMeshes.push(seat);
+    // backrest
+    const bGeo = new THREE.BoxGeometry(0.38, 0.35, 0.04);
+    const back = new THREE.Mesh(bGeo, mat);
+    back.position.set(x, 0.66, z - 0.16);
+    scene.add(back); furnitureMeshes.push(back);
+    // legs (2 front, 2 back)
+    const lGeo = new THREE.BoxGeometry(0.04, 0.42, 0.04);
+    [[-0.15, 0.14], [0.15, 0.14], [-0.15, -0.14], [0.15, -0.14]].forEach(([dx, dz]) => {
+      const leg = new THREE.Mesh(lGeo, mat);
+      leg.position.set(x + dx, 0.21, z + dz);
+      scene.add(leg); furnitureMeshes.push(leg);
+    });
+  }
+
+  /** Add a student desk + chair pair */
+  function addStudentDesk(scene, x, z) {
+    const deskMat = new THREE.MeshLambertMaterial({ color: 0xd7ccc8 });
+    // Desk top
+    const tGeo = new THREE.BoxGeometry(0.60, 0.05, 0.44);
+    const top = new THREE.Mesh(tGeo, deskMat);
+    top.position.set(x, 0.70, z);
+    scene.add(top); furnitureMeshes.push(top);
+    // Desk legs
+    const lMat = new THREE.MeshLambertMaterial({ color: 0x9e9e9e });
+    const lGeo = new THREE.BoxGeometry(0.04, 0.68, 0.04);
+    [[-0.26, 0.18], [0.26, 0.18], [-0.26, -0.18], [0.26, -0.18]].forEach(([dx, dz]) => {
+      const leg = new THREE.Mesh(lGeo, lMat);
+      leg.position.set(x + dx, 0.34, z + dz);
+      scene.add(leg); furnitureMeshes.push(leg);
+    });
+    // Chair behind the desk
+    addChair(scene, x, z + 0.50, 0x607d8b);
+  }
+
+  /** Fill a classroom with student desks in a grid pattern */
+  function addClassroomFurniture(scene, room) {
+    addRoomWallPanels(scene, room);
+    addBlackboard(scene, room);
+    addTeacherDesk(scene, room);
+
+    // Student desks: rows of 2, starting after the teacher area
+    const startZ = room.rowMin * TILE3D + TILE3D * 2.0;
+    const endZ   = (room.rowMax + 1) * TILE3D - TILE3D * 0.6;
+    const startX = room.colMin * TILE3D + TILE3D * 0.65;
+    const endX   = (room.colMax + 1) * TILE3D - TILE3D * 0.65;
+
+    const xStep = TILE3D * 0.95;
+    const zStep = TILE3D * 0.92;
+
+    for (let zz = startZ; zz < endZ; zz += zStep) {
+      for (let xx = startX; xx < endX; xx += xStep) {
+        // Don't place desks on T_HIDE tiles or in doorway rows
+        const { col, row } = worldToTile(xx, zz);
+        const tile = (LEVEL_MAP[row] && typeof LEVEL_MAP[row][col] !== 'undefined')
+          ? LEVEL_MAP[row][col] : T_WALL;
+        if (tile === T_FLOOR) {
+          addStudentDesk(scene, xx, zz);
+        }
+      }
+    }
+  }
 
   function build(scene) {
     clear(scene);
@@ -295,6 +483,9 @@ const World = (() => {
         addWindow(scene, 31, r, 'E');
       }
     });
+
+    // ── Classroom furniture (desks, chairs, blackboards, coloured walls) ─────
+    ROOM_DEFS.forEach(room => addClassroomFurniture(scene, room));
   }
 
   return {
