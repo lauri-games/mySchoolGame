@@ -46,12 +46,12 @@ const CATCH_DIST    = 1.2;    // distance at which teacher catches player
 
 // Colours (hex)
 const COL = {
-  FLOOR_A      : 0x2b2d42,
-  FLOOR_B      : 0x252636,
-  WALL         : 0x6b7280,
-  WALL_TOP     : 0x9ca3af,
-  HIDE_TILE    : 0x4a3728,
-  HIDE_FRONT   : 0x6b4c36,
+  FLOOR_A      : 0xd4c9b0,   // warm light tile A
+  FLOOR_B      : 0xc9bea5,   // warm light tile B
+  WALL         : 0xe8e0d0,   // bright cream wall
+  WALL_TOP     : 0xf5f0e8,   // near-white wall top
+  HIDE_TILE    : 0x7a5c40,
+  HIDE_FRONT   : 0x9c7050,
   STAIRS       : 0xfbbf24,   // bright amber so the player notices stairs
 
   PLAYER       : 0x38bdf8,
