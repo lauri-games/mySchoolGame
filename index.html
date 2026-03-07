@@ -3,31 +3,202 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Schulalltag – Stealth Survival</title>
+  <title>Schulalltag – Stealth Survival 3D</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       background: #0d0d0d;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      min-height: 100vh;
       overflow: hidden;
+      font-family: monospace;
+      color: #fff;
     }
-    canvas { display: block; }
+
+    /* Three.js canvas fills the screen */
+    #game-canvas { display: block; width: 100vw; height: 100vh; }
+
+    /* Click-to-start overlay */
+    #click-overlay {
+      position: fixed; inset: 0;
+      display: flex; justify-content: center; align-items: center;
+      background: rgba(0,0,0,0.7);
+      z-index: 100;
+      cursor: pointer;
+    }
+    #click-overlay span {
+      font-size: 28px; color: #94a3b8;
+      text-align: center; line-height: 1.6;
+    }
+    #click-overlay.hidden { display: none; }
+
+    /* Minimap canvas – bottom-right */
+    #minimap {
+      position: fixed;
+      bottom: 16px; right: 16px;
+      width: 256px; height: 160px;
+      border: 2px solid rgba(255,255,255,0.25);
+      border-radius: 6px;
+      background: #111;
+      z-index: 20;
+      image-rendering: pixelated;
+    }
+
+    /* HUD overlay */
+    #hud {
+      position: fixed; top: 0; left: 0; right: 0;
+      height: 44px;
+      background: rgba(0,0,0,0.55);
+      display: flex; align-items: center;
+      padding: 0 16px;
+      z-index: 20;
+      pointer-events: none;
+    }
+    #hud > * { pointer-events: auto; }
+
+    #hud-timer-label { font-size: 18px; color: #94a3b8; margin-right: 8px; }
+    #hud-timer { font-size: 18px; color: #4ade80; font-weight: bold; }
+
+    #hud-center {
+      flex: 1; text-align: center;
+    }
+    #hud-hide-hint { font-size: 14px; color: #64748b; }
+    #hud-stair-hint { font-size: 14px; color: #fbbf24; }
+
+    #hud-right { text-align: right; }
+    #hud-school { font-size: 16px; color: #e2e8f0; }
+    #hud-teacher-state { font-size: 11px; color: #6b7280; }
+
+    #hud-floors {
+      display: flex; gap: 12px; margin-left: 24px;
+    }
+    .floor-btn {
+      font-size: 14px; color: #cbd5e1; cursor: pointer;
+      background: none; border: none; font-family: monospace;
+      pointer-events: auto;
+    }
+    .floor-btn:hover { color: #fff; }
+    .floor-btn.active { color: #fff; font-weight: bold; }
+
+    /* Chase warning border */
+    #chase-warning {
+      position: fixed; inset: 0;
+      border: 6px solid rgba(239,68,68,0.45);
+      pointer-events: none;
+      z-index: 19;
+      display: none;
+    }
+    #chase-warning.active { display: block; }
+
+    /* Game-over / Win overlay */
+    #end-overlay {
+      position: fixed; inset: 0;
+      display: none; justify-content: center; align-items: center;
+      background: rgba(0,0,0,0.78);
+      z-index: 50;
+    }
+    #end-overlay.active { display: flex; }
+
+    #end-card {
+      width: 520px;
+      background: #1e1e2e;
+      border-radius: 18px;
+      overflow: hidden;
+      text-align: center;
+    }
+    #end-header {
+      height: 64px; display: flex; align-items: center; justify-content: center;
+      font-size: 36px; font-weight: bold;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+    }
+    #end-header.lose { background: #dc2626; }
+    #end-header.win  { background: #15803d; }
+
+    #end-body { padding: 32px 24px; }
+    #end-subtitle { font-size: 20px; color: #fbbf24; margin-bottom: 12px; }
+    #end-message { font-size: 16px; color: #f87171; margin-bottom: 24px; }
+    #end-countdown { font-size: 18px; color: #a78bfa; }
+
+    /* Crosshair */
+    #crosshair {
+      position: fixed;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 20px; height: 20px;
+      z-index: 15;
+      pointer-events: none;
+    }
+    #crosshair::before, #crosshair::after {
+      content: '';
+      position: absolute;
+      background: rgba(255,255,255,0.5);
+    }
+    #crosshair::before {
+      width: 2px; height: 20px;
+      left: 9px; top: 0;
+    }
+    #crosshair::after {
+      width: 20px; height: 2px;
+      top: 9px; left: 0;
+    }
   </style>
 </head>
 <body>
-  <!-- Phaser 3 from CDN -->
-  <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
 
-  <!-- Game modules – load order matters -->
+  <!-- Click to start / pointer lock -->
+  <div id="click-overlay">
+    <span>Klicke um zu starten<br><small style="font-size:16px;color:#64748b">WASD = Bewegen &nbsp; Maus = Umsehen &nbsp; E = Verstecken<br>F = Treppe hoch &nbsp; G = Treppe runter</small></span>
+  </div>
+
+  <!-- Crosshair -->
+  <div id="crosshair"></div>
+
+  <!-- HUD bar -->
+  <div id="hud">
+    <span id="hud-timer-label">ÜBERLEBE:</span>
+    <span id="hud-timer">60</span>
+    <div id="hud-floors">
+      <button class="floor-btn active" data-floor="0">Etage 1</button>
+      <button class="floor-btn" data-floor="1">Etage 2</button>
+      <button class="floor-btn" data-floor="2">Etage 3</button>
+    </div>
+    <div id="hud-center">
+      <div id="hud-hide-hint">[E] Verstecken</div>
+      <div id="hud-stair-hint"></div>
+    </div>
+    <div id="hud-right">
+      <div id="hud-school">Friedrich Wilhelm Gymnasium</div>
+      <div id="hud-teacher-state"></div>
+    </div>
+  </div>
+
+  <!-- Chase warning border -->
+  <div id="chase-warning"></div>
+
+  <!-- Minimap -->
+  <canvas id="minimap" width="256" height="160"></canvas>
+
+  <!-- End screen overlay -->
+  <div id="end-overlay">
+    <div id="end-card">
+      <div id="end-header"></div>
+      <div id="end-body">
+        <div id="end-subtitle"></div>
+        <div id="end-message"></div>
+        <div id="end-countdown"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Three.js from CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+
+  <!-- Game modules -->
   <script src="js/config.js"></script>
   <script src="js/mapData.js"></script>
-  <script src="js/scenes/GameOverScene.js"></script>
-  <script src="js/scenes/WinScene.js"></script>
-  <script src="js/scenes/UIScene.js"></script>
-  <script src="js/scenes/GameScene.js"></script>
+  <script src="js/world.js"></script>
+  <script src="js/player.js"></script>
+  <script src="js/teacher.js"></script>
+  <script src="js/minimap.js"></script>
+  <script src="js/ui.js"></script>
   <script src="js/main.js"></script>
 </body>
 </html>
