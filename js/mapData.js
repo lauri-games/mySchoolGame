@@ -99,11 +99,71 @@ const PLAYER_SPAWNS = [
 let PLAYER_SPAWN = PLAYER_SPAWNS[0];
 
 // Teacher defs per floor (basic variations)
+// Waypoints now include deep classroom positions so teachers roam inside rooms.
+// The AI will pick random next waypoints from the full list instead of looping.
 const TEACHERS_FLOOR_0 = [
-  { col: 2, row: 1, waypoints: [[2,1],[14,1],[29,1],[14,1]] },
-  { col: 29, row: 9, waypoints: [[29,9],[15,9],[2,9],[15,9]] },
-  { col: 9, row: 18, waypoints: [[9,18],[9,10],[9,1],[9,10]] },
-  { col: 21, row: 2, waypoints: [[21,2],[21,9],[21,18],[21,9]] },
+  {
+    col: 2, row: 1,
+    waypoints: [
+      // corridors
+      [2,1],[14,1],[29,1],
+      // upper-left classroom
+      [3,4],[5,6],[2,5],
+      // upper-mid classroom
+      [13,4],[17,6],[15,5],
+      // lower-left classroom
+      [3,13],[5,15],[2,14],
+      // middle corridors
+      [8,9],[22,10],[15,9],
+    ],
+  },
+  {
+    col: 29, row: 9,
+    waypoints: [
+      // corridors
+      [29,9],[15,10],[2,9],
+      // upper-right classroom
+      [26,4],[28,6],[25,5],
+      // lower-right classroom
+      [26,13],[28,15],[25,14],
+      // upper-mid classroom
+      [14,6],[17,4],[16,5],
+      // vertical corridors
+      [9,5],[9,14],[22,5],[22,14],
+    ],
+  },
+  {
+    col: 9, row: 18,
+    waypoints: [
+      // corridors
+      [9,18],[9,10],[9,1],[22,18],[22,1],
+      // lower-left classroom
+      [3,15],[5,13],[4,14],
+      // lower-mid classroom
+      [14,15],[17,13],[15,14],
+      // lower-right classroom
+      [26,15],[28,13],[27,14],
+      // upper classrooms
+      [4,5],[16,5],[27,5],
+    ],
+  },
+  {
+    col: 21, row: 5,
+    waypoints: [
+      // corridors
+      [21,2],[15,1],[3,1],[29,1],
+      [15,9],[3,10],[29,10],
+      [21,18],[15,18],[3,18],
+      // upper-right classroom
+      [25,4],[27,6],[26,5],
+      // upper-mid classroom
+      [13,3],[17,7],[15,5],
+      // lower-right classroom
+      [25,13],[27,15],[26,14],
+      // lower-mid classroom
+      [13,12],[17,16],[15,14],
+    ],
+  },
 ];
 
 const TEACHERS_FLOOR_1 = TEACHERS_FLOOR_0.map((t) => ({

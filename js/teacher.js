@@ -48,6 +48,24 @@ const TeacherManager = (() => {
     return _hasLOS(t.px, t.py, pp.x, pp.y);
   }
 
+  // Collision radius in pixel-space (mirrors PLAYER_RADIUS in world units)
+  const _RADIUS = PLAYER_RADIUS * TILE;
+
+  /** Returns true if the circle at (px,py) with _RADIUS overlaps a wall tile */
+  function _collidesWall(px, py) {
+    // Check the four cardinal probe points around the circle edge
+    const probes = [
+      [px + _RADIUS, py],
+      [px - _RADIUS, py],
+      [px, py + _RADIUS],
+      [px, py - _RADIUS],
+    ];
+    for (const [cx, cy] of probes) {
+      if (_tileAt(cx, cy) === T_WALL) return true;
+    }
+    return false;
+  }
+
   function _moveToward(t, tx, ty, speed, delta) {
     const dx   = tx - t.px;
     const dy   = ty - t.py;
@@ -57,11 +75,47 @@ const TeacherManager = (() => {
       return true; // arrived
     }
 
-    const move = speed * delta;
-    t.px += (dx / dist) * move;
-    t.py += (dy / dist) * move;
     t.facing = Math.atan2(dy, dx);
+    const move = speed * delta;
+    const nx = dx / dist;
+    const ny = dy / dist;
+
+    // Try full diagonal move first
+    const newPx = t.px + nx * move;
+    const newPy = t.py + ny * move;
+
+    if (!_collidesWall(newPx, newPy)) {
+      t.px = newPx;
+      t.py = newPy;
+    } else {
+      // Try sliding along X only
+      const slidePx = t.px + nx * move;
+      if (!_collidesWall(slidePx, t.py)) {
+        t.px = slidePx;
+      }
+      // Try sliding along Y only
+      const slidePy = t.py + ny * move;
+      if (!_collidesWall(t.px, slidePy)) {
+        t.py = slidePy;
+      }
+      // If both slides are blocked the teacher stays put this frame –
+      // the next random waypoint pick will resolve the stuck state.
+    }
+
     return false;
+  }
+
+  /**
+   * Validate that a waypoint target is reachable (not inside a wall).
+   * If the waypoint tile is a wall, skip it and pick another random one.
+   */
+  function _safeWaypointIndex(t, preferred) {
+    for (let attempts = 0; attempts < t.waypoints.length; attempts++) {
+      const idx = (preferred + attempts) % t.waypoints.length;
+      const wp  = t.waypoints[idx];
+      if (_tileAt(wp.x, wp.y) !== T_WALL) return idx;
+    }
+    return preferred; // fallback
   }
 
   // ── public ────────────────────────────────────────────────────────
@@ -129,7 +183,7 @@ const TeacherManager = (() => {
         state:           STATE.PATROL,
         facing:          0,
         px, py,          // position in tile-pixel coords
-        waypointIndex:   0,
+        waypointIndex:   0,  // will be randomised after object is created
         waypoints:       def.waypoints.map(([c, r]) => ({
           x: c * TILE + TILE / 2,
           y: r * TILE + TILE / 2,
@@ -137,7 +191,15 @@ const TeacherManager = (() => {
         lastKnownPos:    null,
         searchWait:      0,
         arrivedAtSearch: false,
+        // short random pause between waypoints so teachers don't all move in sync
+        roamPause:       Math.random() * 1.5,
       });
+    });
+
+    // Randomise starting waypoints AFTER the full objects exist (needs _safeWaypointIndex)
+    teachers.forEach(t => {
+      const rnd = Math.floor(Math.random() * t.waypoints.length);
+      t.waypointIndex = _safeWaypointIndex(t, rnd);
     });
   }
 
@@ -171,10 +233,24 @@ const TeacherManager = (() => {
     switch (t.state) {
       case STATE.PATROL: {
         if (sees) { t.state = STATE.CHASE; break; }
+
+        // Pause briefly before moving to next waypoint (natural roaming feel)
+        if (t.roamPause > 0) {
+          t.roamPause -= delta;
+          break;
+        }
+
         const wp = t.waypoints[t.waypointIndex];
         const arrived = _moveToward(t, wp.x, wp.y, TEACHER_PATROL_SPD, delta);
         if (arrived) {
-          t.waypointIndex = (t.waypointIndex + 1) % t.waypoints.length;
+          // Pick a RANDOM next waypoint (not the same one) → unpredictable roaming
+          let next;
+          do {
+            next = Math.floor(Math.random() * t.waypoints.length);
+          } while (next === t.waypointIndex && t.waypoints.length > 1);
+          t.waypointIndex = _safeWaypointIndex(t, next);
+          // Small random pause (0.3 – 2 s) so teachers linger in rooms naturally
+          t.roamPause = 0.3 + Math.random() * 1.7;
         }
         break;
       }
@@ -202,7 +278,13 @@ const TeacherManager = (() => {
           if (arrived) t.arrivedAtSearch = true;
         } else {
           t.searchWait -= delta;
-          if (t.searchWait <= 0) t.state = STATE.PATROL;
+          if (t.searchWait <= 0) {
+            // Pick a random new waypoint so the teacher doesn't repeat the same path
+            const next = Math.floor(Math.random() * t.waypoints.length);
+            t.waypointIndex = _safeWaypointIndex(t, next);
+            t.roamPause = 0.5 + Math.random() * 1.0;
+            t.state = STATE.PATROL;
+          }
         }
         break;
       }

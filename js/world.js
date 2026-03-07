@@ -354,12 +354,20 @@ const World = (() => {
     }
 
     // Hide spots (lockers – wooden boxes, shorter than walls)
+    // Only rendered OUTSIDE classrooms (i.e. in corridors)
     const hideGeo = new THREE.BoxGeometry(TILE3D * 0.7, WALL_HEIGHT * 0.6, TILE3D * 0.7);
     const hideMat = new THREE.MeshLambertMaterial({ color: 0x9c7050 });
 
     for (let row = 0; row < ROWS; row++) {
       for (let col = 0; col < COLS; col++) {
         if (LEVEL_MAP[row][col] === T_HIDE) {
+          // Skip tiles that lie inside a classroom
+          const inRoom = ROOM_DEFS.some(r =>
+            col >= r.colMin && col <= r.colMax &&
+            row >= r.rowMin && row <= r.rowMax
+          );
+          if (inRoom) continue;
+
           const pos = tileToWorld(col, row);
           const mesh = new THREE.Mesh(hideGeo, hideMat);
           mesh.position.set(pos.x, WALL_HEIGHT * 0.3, pos.z);
