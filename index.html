@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Schulalltag – Stealth Survival 3D</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -11,6 +11,10 @@
       overflow: hidden;
       font-family: monospace;
       color: #fff;
+      touch-action: none;
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      user-select: none;
     }
 
     /* Three.js canvas fills the screen */
@@ -98,7 +102,7 @@
     #end-overlay.active { display: flex; }
 
     #end-card {
-      width: 520px;
+      width: min(520px, 90vw);
       background: #1e1e2e;
       border-radius: 18px;
       overflow: hidden;
@@ -139,6 +143,55 @@
       width: 20px; height: 2px;
       top: 9px; left: 0;
     }
+    /* ── Touch controls ─────────────────────────── */
+    #touch-controls { display: none; }
+
+    #touch-joystick-area {
+      position: fixed; left: 0; bottom: 0;
+      width: 50vw; height: 55vh;
+      z-index: 30;
+      pointer-events: none; /* events handled by document-level listeners */
+    }
+    #touch-joystick-canvas {
+      position: absolute;
+      left: 20px; bottom: 20px;
+      width: 200px; height: 200px;
+      pointer-events: none;
+    }
+
+    #touch-look-area {
+      position: fixed; right: 0; bottom: 0;
+      width: 50vw; height: 55vh;
+      z-index: 30;
+      pointer-events: none;
+    }
+
+    .touch-btn {
+      position: fixed; z-index: 35;
+      width: 56px; height: 56px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.15);
+      border: 2px solid rgba(255,255,255,0.3);
+      color: #fff; font-size: 20px;
+      display: flex; align-items: center; justify-content: center;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .touch-btn:active { background: rgba(255,255,255,0.3); }
+
+    #touch-btn-hide       { right: 20px; bottom: 200px; }
+    #touch-btn-stair-up   { right: 90px; bottom: 200px; display: none; }
+    #touch-btn-stair-down { right: 90px; bottom: 130px; display: none; }
+
+    /* Responsive adjustments for touch devices */
+    @media (pointer: coarse) {
+      #minimap {
+        width: 200px; height: 125px;
+        bottom: 80px;
+      }
+      #hud-hide-hint { display: none; }
+      #hud-stair-hint { display: none; }
+    }
   </style>
 </head>
 <body>
@@ -173,6 +226,17 @@
   <!-- Chase warning border -->
   <div id="chase-warning"></div>
 
+  <!-- Touch controls (hidden on desktop) -->
+  <div id="touch-controls">
+    <div id="touch-joystick-area">
+      <canvas id="touch-joystick-canvas" width="200" height="200"></canvas>
+    </div>
+    <div id="touch-look-area"></div>
+    <button class="touch-btn" id="touch-btn-hide" aria-label="Verstecken">E</button>
+    <button class="touch-btn" id="touch-btn-stair-up" aria-label="Treppe hoch">&#x2191;</button>
+    <button class="touch-btn" id="touch-btn-stair-down" aria-label="Treppe runter">&#x2193;</button>
+  </div>
+
   <!-- Minimap -->
   <canvas id="minimap" width="256" height="160"></canvas>
 
@@ -199,6 +263,7 @@
   <script src="js/teacher.js"></script>
   <script src="js/minimap.js"></script>
   <script src="js/ui.js"></script>
+  <script src="js/touch.js"></script>
   <script src="js/main.js"></script>
 </body>
 </html>
