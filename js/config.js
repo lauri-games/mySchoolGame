@@ -37,6 +37,13 @@ const TEACHER_SEARCH_SPD  = 110;
 // Search "I lost you" pause duration
 const SEARCH_WAIT_MS = 2000;
 
+// 3D world constants
+const WALL_HEIGHT   = 3;      // wall height in world units
+const TILE3D        = 2;      // world units per tile
+const PLAYER_HEIGHT = 1.6;    // camera eye height
+const PLAYER_RADIUS = 0.35;   // collision radius in world units
+const CATCH_DIST    = 1.2;    // distance at which teacher catches player
+
 // Colours (hex)
 const COL = {
   FLOOR_A      : 0x2b2d42,
