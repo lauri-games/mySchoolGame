@@ -9,6 +9,9 @@ const Game = (() => {
   let timeLeft   = GAME_DURATION;
   let timerAccum = 0; // accumulator for 1-second timer ticks
 
+  // Touch device detection
+  const IS_TOUCH = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+
   // ── Initialisation ─────────────────────────────────────────────────
 
   function init() {
@@ -33,20 +36,50 @@ const Game = (() => {
       renderer.setSize(window.innerWidth, window.innerHeight);
     });
 
-    // Pointer lock
+    // Input setup – touch vs pointer lock
     const clickOverlay = document.getElementById('click-overlay');
-    clickOverlay.addEventListener('click', () => {
-      document.body.requestPointerLock();
-    });
 
-    document.addEventListener('pointerlockchange', () => {
-      if (document.pointerLockElement === document.body) {
+    if (IS_TOUCH) {
+      // Touch device: update overlay text
+      const overlaySpan = clickOverlay.querySelector('span');
+      if (overlaySpan) {
+        overlaySpan.innerHTML = 'Tippe um zu starten<br>' +
+          '<small style="font-size:14px;color:#64748b">' +
+          'Links = Joystick &nbsp; Rechts = Umsehen<br>' +
+          'Buttons rechts = Verstecken / Treppen</small>';
+      }
+
+      // Tap to start (no pointer lock)
+      clickOverlay.addEventListener('touchstart', (e) => {
+        e.preventDefault();
         clickOverlay.classList.add('hidden');
         if (!gameActive) startGame();
-      } else {
-        clickOverlay.classList.remove('hidden');
-      }
-    });
+      }, { passive: false });
+
+      // Tell player module to use touch input
+      Player.setTouchMode(true);
+
+      // Init touch controls with action callbacks
+      TouchControls.init({
+        onHide: () => { if (gameActive) Player.toggleHide(); },
+        onStairUp: () => { if (gameActive) _useStairsUp(); },
+        onStairDown: () => { if (gameActive) _useStairsDown(); },
+      });
+    } else {
+      // Desktop: pointer lock
+      clickOverlay.addEventListener('click', () => {
+        document.body.requestPointerLock();
+      });
+
+      document.addEventListener('pointerlockchange', () => {
+        if (document.pointerLockElement === document.body) {
+          clickOverlay.classList.add('hidden');
+          if (!gameActive) startGame();
+        } else {
+          clickOverlay.classList.remove('hidden');
+        }
+      });
+    }
 
     // Key handlers for hide and stairs (these trigger once, not held)
     document.addEventListener('keydown', (e) => {
@@ -133,7 +166,7 @@ const Game = (() => {
     gameActive = false;
     UI.showGameOver(() => {
       startGame();
-      document.body.requestPointerLock();
+      if (!IS_TOUCH) document.body.requestPointerLock();
     });
   }
 
@@ -141,7 +174,7 @@ const Game = (() => {
     gameActive = false;
     UI.showWin(() => {
       startGame();
-      document.body.requestPointerLock();
+      if (!IS_TOUCH) document.body.requestPointerLock();
     });
   }
 
@@ -157,6 +190,17 @@ const Game = (() => {
     lastTime = now;
 
     if (gameActive) {
+      // Touch input → player
+      if (IS_TOUCH) {
+        const joy = TouchControls.getJoystick();
+        Player.applyTouchInput(joy.moveX, joy.moveZ);
+
+        const look = TouchControls.consumeLookDelta();
+        Player.applyTouchLook(look.yaw, look.pitch);
+
+        TouchControls.update();
+      }
+
       // Player movement
       Player.update(delta);
 
@@ -184,15 +228,22 @@ const Game = (() => {
       // Stair hint
       const pos = Player.getPosition();
       const curTile = World.tileAtWorld(pos.x, pos.z);
-      let hint = '';
-      if (curTile === T_STAIRS) {
-        if (CURRENT_FLOOR < LEVEL_MAPS.length - 1) hint += '[F] ↑';
-        if (CURRENT_FLOOR > 0) {
+      const onStairs = curTile === T_STAIRS;
+      const canUp   = onStairs && CURRENT_FLOOR < LEVEL_MAPS.length - 1;
+      const canDown = onStairs && CURRENT_FLOOR > 0;
+
+      if (IS_TOUCH) {
+        TouchControls.showStairButtons(canUp, canDown);
+        UI.updateStairHint('');
+      } else {
+        let hint = '';
+        if (canUp) hint += '[F] ↑';
+        if (canDown) {
           if (hint) hint += '  ';
           hint += '[G] ↓';
         }
+        UI.updateStairHint(hint);
       }
-      UI.updateStairHint(hint);
 
       // Teacher state display + chase warning
       UI.updateTeacherState(TeacherManager.getStatesString());

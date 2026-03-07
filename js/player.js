@@ -14,6 +14,11 @@ const Player = (() => {
   // Input state
   const keys = { w: false, a: false, s: false, d: false, e: false, f: false, g: false };
 
+  // Touch input state (set externally by TouchControls)
+  let touchMoveX = 0;  // strafe: -1 left, +1 right
+  let touchMoveZ = 0;  // forward/back: -1 forward, +1 backward
+  let useTouch   = false;
+
   function init(threeCamera) {
     camera = threeCamera;
     isHiding = false;
@@ -28,16 +33,33 @@ const Player = (() => {
     camera.position.set(posX, PLAYER_HEIGHT, posZ);
     _updateCameraRotation();
 
-    // Key listeners
+    // Key listeners (skip mouse on touch devices)
     document.addEventListener('keydown', _onKeyDown);
     document.addEventListener('keyup',   _onKeyUp);
-    document.addEventListener('mousemove', _onMouse);
+    if (!useTouch) {
+      document.addEventListener('mousemove', _onMouse);
+    }
   }
 
   function destroy() {
     document.removeEventListener('keydown', _onKeyDown);
     document.removeEventListener('keyup',   _onKeyUp);
-    document.removeEventListener('mousemove', _onMouse);
+    if (!useTouch) {
+      document.removeEventListener('mousemove', _onMouse);
+    }
+  }
+
+  function setTouchMode(val) { useTouch = val; }
+
+  function applyTouchInput(mx, mz) {
+    touchMoveX = mx;
+    touchMoveZ = mz;
+  }
+
+  function applyTouchLook(dYaw, dPitch) {
+    yaw   -= dYaw;
+    pitch -= dPitch;
+    pitch  = Math.max(-Math.PI / 2.5, Math.min(Math.PI / 2.5, pitch));
   }
 
   function _onKeyDown(e) {
@@ -112,10 +134,16 @@ const Player = (() => {
     const rightX = Math.cos(yaw);
     const rightZ = -Math.sin(yaw);
 
-    if (keys.w) { moveX += forwardX; moveZ += forwardZ; }
-    if (keys.s) { moveX -= forwardX; moveZ -= forwardZ; }
-    if (keys.a) { moveX -= rightX;   moveZ -= rightZ; }
-    if (keys.d) { moveX += rightX;   moveZ += rightZ; }
+    if (useTouch && (touchMoveX !== 0 || touchMoveZ !== 0)) {
+      // Touch joystick: moveZ negative = forward (screen Y up)
+      moveX += forwardX * (-touchMoveZ) + rightX * touchMoveX;
+      moveZ += forwardZ * (-touchMoveZ) + rightZ * touchMoveX;
+    } else {
+      if (keys.w) { moveX += forwardX; moveZ += forwardZ; }
+      if (keys.s) { moveX -= forwardX; moveZ -= forwardZ; }
+      if (keys.a) { moveX -= rightX;   moveZ -= rightZ; }
+      if (keys.d) { moveX += rightX;   moveZ += rightZ; }
+    }
 
     // Normalise diagonal
     const len = Math.sqrt(moveX * moveX + moveZ * moveZ);
@@ -186,5 +214,8 @@ const Player = (() => {
     getCamera,
     getTilePixelPos,
     getPixelPos,
+    setTouchMode,
+    applyTouchInput,
+    applyTouchLook,
   };
 })();
