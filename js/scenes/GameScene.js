@@ -157,9 +157,14 @@ class GameScene extends Phaser.Scene {
   }
 
   // ── Draw tile-map visuals ─────────────────────────────────────────────────
+  // helper graphics object stored so we can clear & redraw when floors change
   _buildMap() {
-    const gfx = this.add.graphics();
-    gfx.setDepth(0);
+    if (!this.mapGfx) {
+      this.mapGfx = this.add.graphics();
+      this.mapGfx.setDepth(0);
+    }
+
+    this.mapGfx.clear();
 
     for (let row = 0; row < ROWS; row++) {
       for (let col = 0; col < COLS; col++) {
@@ -168,23 +173,47 @@ class GameScene extends Phaser.Scene {
         const y = row * TILE;
 
         if (tile === T_WALL) {
-          gfx.fillStyle(COL.WALL, 1);
-          gfx.fillRect(x, y, TILE, TILE);
+          this.mapGfx.fillStyle(COL.WALL, 1);
+          this.mapGfx.fillRect(x, y, TILE, TILE);
           // lighter top-edge to give a 3-D hint
-          gfx.fillStyle(COL.WALL_TOP, 1);
-          gfx.fillRect(x, y, TILE, 5);
+          this.mapGfx.fillStyle(COL.WALL_TOP, 1);
+          this.mapGfx.fillRect(x, y, TILE, 5);
         } else {
           // checkerboard floor
           const floorCol = (row + col) % 2 === 0 ? COL.FLOOR_A : COL.FLOOR_B;
-          gfx.fillStyle(floorCol, 1);
-          gfx.fillRect(x, y, TILE, TILE);
+          this.mapGfx.fillStyle(floorCol, 1);
+          this.mapGfx.fillRect(x, y, TILE, TILE);
 
           if (tile === T_HIDE) {
             // draw a locker / desk outline
-            gfx.fillStyle(COL.HIDE_TILE, 1);
-            gfx.fillRect(x + 4, y + 4, TILE - 8, TILE - 8);
-            gfx.fillStyle(COL.HIDE_FRONT, 1);
-            gfx.fillRect(x + 6, y + 7, TILE - 12, TILE - 14);
+            this.mapGfx.fillStyle(COL.HIDE_TILE, 1);
+            this.mapGfx.fillRect(x + 4, y + 4, TILE - 8, TILE - 8);
+            this.mapGfx.fillStyle(COL.HIDE_FRONT, 1);
+            this.mapGfx.fillRect(x + 6, y + 7, TILE - 12, TILE - 14);
+          } else if (tile === T_STAIRS) {
+            // Draw prominent staircase indicator
+            // Background circle
+            this.mapGfx.fillStyle(COL.STAIRS, 1);
+            this.mapGfx.fillCircle(x + TILE / 2, y + TILE / 2, TILE / 2.2);
+            
+            // Border circle
+            this.mapGfx.lineStyle(2, 0x000000, 0.8);
+            this.mapGfx.strokeCircle(x + TILE / 2, y + TILE / 2, TILE / 2.2);
+            
+            // Upward triangle (larger)
+            this.mapGfx.fillStyle(0x000000, 1);
+            this.mapGfx.fillTriangle(
+              x + TILE / 2, y + 6,
+              x + 10, y + 18,
+              x + TILE - 10, y + 18,
+            );
+            
+            // Downward triangle (larger)
+            this.mapGfx.fillTriangle(
+              x + TILE / 2, y + TILE - 6,
+              x + 10, y + TILE - 18,
+              x + TILE - 10, y + TILE - 18,
+            );
           }
         }
       }
@@ -302,9 +331,13 @@ class GameScene extends Phaser.Scene {
       hide:  Phaser.Input.Keyboard.KeyCodes.E,
     });
     this.input.keyboard.on('keydown-E', this._toggleHide, this);
+    // keybindings for stairs movement
+    this.input.keyboard.on('keydown-F', this._useStairsUp, this);
+    this.input.keyboard.on('keydown-G', this._useStairsDown, this);
 
     // Timer
-    this.timeLeft   = GAME_DURATION;
+    // restore timer if we switched floors, otherwise start fresh
+    this.timeLeft   = this.registry.get('timeLeft') ?? GAME_DURATION;
     this.gameActive = true;
     this.registry.set('timeLeft', this.timeLeft);
     this.registry.set('teacherState', '');
@@ -530,6 +563,28 @@ class GameScene extends Phaser.Scene {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
+  //  Stairs use handlers
+  _useStairsUp() {
+    if (!this.gameActive) return;
+    const tile = this._tileAt(this.player.x, this.player.y);
+    if (tile !== T_STAIRS) return;
+    if (CURRENT_FLOOR < LEVEL_MAPS.length - 1) {
+      selectFloor(CURRENT_FLOOR + 1);
+      this._floorChanged();
+    }
+  }
+
+  _useStairsDown() {
+    if (!this.gameActive) return;
+    const tile = this._tileAt(this.player.x, this.player.y);
+    if (tile !== T_STAIRS) return;
+    if (CURRENT_FLOOR > 0) {
+      selectFloor(CURRENT_FLOOR - 1);
+      this._floorChanged();
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
   //  Teacher caught player
   // ─────────────────────────────────────────────────────────────────────────
   _onCaught() {
@@ -575,6 +630,27 @@ class GameScene extends Phaser.Scene {
   // ─────────────────────────────────────────────────────────────────────────
   //  update()
   // ─────────────────────────────────────────────────────────────────────────
+  // helper used when the floor has been changed mid-game
+  _floorChanged() {
+    // current floor already set via selectFloor()
+    // reposition player
+    this.player.setPosition(PLAYER_SPAWN.col * TILE + TILE / 2, PLAYER_SPAWN.row * TILE + TILE / 2);
+
+    // redraw map and walls
+    this.mapGfx.clear();
+    this._buildMap();
+    this.walls.clear(true, true);
+    this._buildWalls();
+
+    // replace teachers
+    this.teachers.forEach((t) => { t.sprite.destroy(); t.alert.destroy(); });
+    this.teachers.length = 0;
+    this._createTeachers();
+
+    // update UI
+    this.registry.set('currentFloor', CURRENT_FLOOR);
+  }
+
   update(_time, delta) {
     if (!this.gameActive) return;
 
@@ -613,16 +689,27 @@ class GameScene extends Phaser.Scene {
       const hcol = Math.floor(this.player.x / TILE);
       const hrow = Math.floor(this.player.y / TILE);
       this.hideOverlay.strokeRect(hcol * TILE + 2, hrow * TILE + 2, TILE - 4, TILE - 4);
+    }    // stairs hint
+    let hint = '';
+    if (curTile === T_STAIRS) {
+      if (CURRENT_FLOOR < LEVEL_MAPS.length - 1) hint += '[F] ↑';
+      if (CURRENT_FLOOR > 0) {
+        if (hint) hint += '  ';
+        hint += '[G] ↓';
+      }
     }
-
+    this.registry.set('stairHint', hint);
     // ── Vision cones ───────────────────────────────────────────────────────
     this._drawVisionCones();
 
     // ── Teacher AI ─────────────────────────────────────────────────────────
     this.teachers.forEach((t) => this._updateTeacher(t, delta));
 
+    // expose teacher states to UI –────────────────────────────────────────
+
     // ── Expose teacher states to UI ────────────────────────────────────────
     const states = this.teachers.map((t) => t.state).join(' | ');
     this.registry.set('teacherState', states);
+    // floor/other registry values already updated elsewhere
   }
 }

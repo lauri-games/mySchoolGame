@@ -12,9 +12,10 @@ const GAME_H = ROWS * TILE; // 800
 const GAME_DURATION = 60;   // seconds to survive
 
 // Tile IDs
-const T_FLOOR = 0;
-const T_WALL  = 1;
-const T_HIDE  = 2;          // locker / desk – player can hide here
+const T_FLOOR  = 0;
+const T_WALL   = 1;
+const T_HIDE   = 2;          // locker / desk – player can hide here
+const T_STAIRS = 3;          // staircase tile (can change floor)
 
 // Enemy states
 const STATE = Object.freeze({
@@ -44,6 +45,7 @@ const COL = {
   WALL_TOP     : 0x9ca3af,
   HIDE_TILE    : 0x4a3728,
   HIDE_FRONT   : 0x6b4c36,
+  STAIRS       : 0xfbbf24,   // bright amber so the player notices stairs
 
   PLAYER       : 0x38bdf8,
   PLAYER_DIR   : 0x0ea5e9,

@@ -39,6 +39,13 @@ class UIScene extends Phaser.Scene {
       color: '#64748b',
     }).setOrigin(0.5, 0);
 
+    // stairs hint (updated via registry)
+    this.stairText = this.add.text(W / 2, 24, '', {
+      fontSize: '14px',
+      fontFamily: 'monospace',
+      color: '#fbbf24',
+    }).setOrigin(0.5, 0);
+
     // School name
     this.add.text(W - 16, 8, 'Friedrich Wilhelm Gymnasium', {
       fontSize: '16px',
@@ -54,6 +61,31 @@ class UIScene extends Phaser.Scene {
       fontFamily: 'monospace',
       color: '#6b7280',
     }).setOrigin(1, 0);
+
+    // Floor selection buttons (Etagen)
+    this.floorTexts = [];
+    const startX = 260;
+    for (let i = 0; i < 3; i++) {
+      const fx = startX + i * 90;
+      const ft = this.add.text(fx, 8, `Etage ${i + 1}`, {
+        fontSize: '14px',
+        fontFamily: 'monospace',
+        color: '#cbd5e1',
+      }).setOrigin(0, 0).setInteractive({ useHandCursor: true });
+
+      ft.on('pointerover', () => ft.setStyle({ color: '#ffffff' }));
+      ft.on('pointerout',  () => ft.setStyle({ color: '#cbd5e1' }));
+
+      ft.on('pointerdown', () => {
+        if (typeof selectFloor === 'function') selectFloor(i);
+        // restart GameScene so new floor data is loaded
+        this.scene.stop('UIScene');
+        this.scene.stop('GameScene');
+        this.scene.start('GameScene');
+      });
+
+      this.floorTexts.push(ft);
+    }
 
     // Warning flash overlay (when a teacher is chasing)
     this.warningOverlay = this.add.graphics();
@@ -74,8 +106,23 @@ class UIScene extends Phaser.Scene {
       }
     });
 
+    this.registry.events.on('changedata-stairHint', (_p, value) => {
+      this.stairText.setText(value);
+    });
+
+    this.registry.events.on('changedata-currentFloor', (_p, value) => {
+      this.floorTexts.forEach((ft, idx) => {
+        ft.setColor(idx === value ? '#ffffff' : '#cbd5e1');
+      });
+    });
+
     // Initialise display with current value
     this._updateTimer(this.registry.get('timeLeft') || GAME_DURATION);
+    // also update floor buttons once on start
+    const cf = this.registry.get('currentFloor') || 0;
+    this.floorTexts.forEach((ft, idx) => {
+      ft.setColor(idx === cf ? '#ffffff' : '#cbd5e1');
+    });
   }
 
   _updateTimer(seconds) {
