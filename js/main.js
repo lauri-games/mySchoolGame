@@ -120,6 +120,7 @@ const Game = (() => {
   }
 
   function _buildCurrentFloor() {
+    selectFloor(CURRENT_FLOOR); // ensure LEVEL_MAP points at the correct (possibly updated) map
     World.build(scene);
   }
 
@@ -257,10 +258,17 @@ const Game = (() => {
     renderer.render(scene, camera);
   }
 
-  return { init };
+  return { init, rebuildFloor: _buildCurrentFloor };
 })();
 
 // Boot
 window.addEventListener('DOMContentLoaded', () => {
   Game.init();
+});
+
+// If the editor map arrives asynchronously after the game already built the
+// world, rebuild immediately so the custom map is visible right away.
+window.addEventListener('editorMapLoaded', () => {
+  console.log('[Game] editorMapLoaded → rebuild world');
+  Game.rebuildFloor();
 });

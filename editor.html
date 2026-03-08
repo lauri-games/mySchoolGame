@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Map-Editor – Schulalltag</title>
+  <style>
+    /* ── Reset & Base ───────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #0f1117;
+      color: #e2e8f0;
+      font-family: 'Segoe UI', system-ui, monospace;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ── Top bar ────────────────────────────────────────────────── */
+    #topbar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 16px;
+      background: #1a1d27;
+      border-bottom: 1px solid #2d3148;
+      flex-shrink: 0;
+      flex-wrap: wrap;
+    }
+    #topbar h1 {
+      font-size: 15px;
+      font-weight: 700;
+      color: #a78bfa;
+      letter-spacing: 0.05em;
+      margin-right: 8px;
+    }
+    .sep {
+      width: 1px; height: 24px;
+      background: #2d3148;
+      flex-shrink: 0;
+    }
+
+    /* Floor tabs */
+    #floor-tabs { display: flex; gap: 4px; }
+    .floor-tab {
+      padding: 4px 14px;
+      background: #252836;
+      border: 1px solid #3a3f5c;
+      border-radius: 6px;
+      color: #94a3b8;
+      cursor: pointer;
+      font-size: 13px;
+      transition: all .15s;
+    }
+    .floor-tab:hover { background: #2e3248; color: #e2e8f0; }
+    .floor-tab.active {
+      background: #4c1d95;
+      border-color: #7c3aed;
+      color: #fff;
+    }
+
+    /* Tile tool buttons */
+    #tools { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+    .tool-btn, .furn-btn {
+      display: flex; align-items: center; gap: 6px;
+      padding: 5px 12px;
+      border-radius: 7px;
+      border: 2px solid transparent;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      transition: all .15s;
+    }
+    .tool-btn .swatch, .furn-btn .swatch {
+      width: 14px; height: 14px;
+      border-radius: 3px;
+      border: 1px solid rgba(255,255,255,0.2);
+      flex-shrink: 0;
+    }
+    .tool-btn:hover, .furn-btn:hover { filter: brightness(1.15); }
+    .tool-btn.active, .furn-btn.active { border-color: #fff !important; }
+
+    #tool-floor  { background: #1e293b; color: #94a3b8; }
+    #tool-wall   { background: #374151; color: #d1d5db; }
+    #tool-stair  { background: #1c2d1e; color: #4ade80; }
+
+    /* Furniture buttons */
+    #furn-tools { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+    .furn-btn { background: #1e2035; color: #c4b5fd; }
+    #tool-furn-blackboard   { background: #14291a; color: #86efac; }
+    #tool-furn-teacher-desk { background: #2a1f14; color: #d4a76a; }
+    #tool-furn-student-desk { background: #1f1f2a; color: #c4b5fd; }
+    #tool-erase-furn        { background: #2d1b1b; color: #f87171; }
+
+    /* Action buttons */
+    #actions { display: flex; gap: 6px; margin-left: auto; align-items: center; }
+    .action-btn {
+      padding: 5px 14px;
+      border-radius: 7px;
+      border: none;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      transition: all .15s;
+    }
+    .action-btn:hover { filter: brightness(1.1); }
+    #btn-reset    { background: #3f3f3f; color: #e2e8f0; }
+    #btn-copy-js  { background: #1d4ed8; color: #fff; }
+    #btn-save     { background: #15803d; color: #fff; }
+    #btn-load     { background: #92400e; color: #fff; }
+    #btn-play     { background: #6d28d9; color: #fff; }
+
+    /* Status pill */
+    #status {
+      font-size: 12px; color: #64748b;
+      padding: 3px 10px;
+      background: #1a1d27;
+      border-radius: 20px;
+      border: 1px solid #2d3148;
+      white-space: nowrap;
+    }
+    #status.ok    { color: #4ade80; border-color: #166534; }
+    #status.error { color: #f87171; border-color: #7f1d1d; }
+
+    /* ── Main area ──────────────────────────────────────────────── */
+    #main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ── Canvas area ────────────────────────────────────────────── */
+    #canvas-wrap {
+      flex: 1;
+      overflow: auto;
+      display: flex;
+      align-items: flex-start;
+      justify-content: flex-start;
+      padding: 20px;
+      background: #0f1117;
+    }
+    #map-canvas {
+      cursor: crosshair;
+      display: block;
+      image-rendering: pixelated;
+      /* crisp pixel art look */
+      border: 2px solid #2d3148;
+      border-radius: 4px;
+    }
+
+    /* ── Side panel ─────────────────────────────────────────────── */
+    #sidepanel {
+      width: 220px;
+      flex-shrink: 0;
+      background: #1a1d27;
+      border-left: 1px solid #2d3148;
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      padding: 14px 12px;
+      gap: 16px;
+    }
+    #sidepanel h2 {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #475569;
+      margin-bottom: 6px;
+    }
+    .legend-row {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 12px; color: #94a3b8;
+      margin-bottom: 4px;
+    }
+    .legend-swatch {
+      width: 18px; height: 18px;
+      border-radius: 3px;
+      border: 1px solid rgba(255,255,255,0.15);
+      flex-shrink: 0;
+    }
+
+    .coord-box {
+      background: #252836;
+      border: 1px solid #2d3148;
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-size: 12px;
+      color: #64748b;
+    }
+    .coord-box span { color: #e2e8f0; font-weight: 600; }
+
+    /* JS export textarea */
+    #js-output-wrap { display: flex; flex-direction: column; gap: 6px; }
+    #js-output {
+      width: 100%;
+      height: 160px;
+      background: #0f1117;
+      border: 1px solid #2d3148;
+      border-radius: 6px;
+      color: #a5f3fc;
+      font-family: monospace;
+      font-size: 10px;
+      padding: 6px;
+      resize: vertical;
+    }
+
+    /* ── Toast ──────────────────────────────────────────────────── */
+    #toast {
+      position: fixed;
+      bottom: 24px; left: 50%;
+      transform: translateX(-50%) translateY(60px);
+      background: #1e293b;
+      border: 1px solid #3b82f6;
+      color: #93c5fd;
+      padding: 10px 22px;
+      border-radius: 10px;
+      font-size: 14px;
+      z-index: 999;
+      transition: transform .3s ease, opacity .3s ease;
+      opacity: 0;
+      pointer-events: none;
+    }
+    #toast.show {
+      transform: translateX(-50%) translateY(0);
+      opacity: 1;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ── Top bar ─────────────────────────────────────────── -->
+  <div id="topbar">
+    <h1>🗺 MAP-EDITOR</h1>
+    <div class="sep"></div>
+
+    <!-- Floor selection -->
+    <div id="floor-tabs">
+      <button class="floor-tab active" data-floor="0">Etage 1</button>
+      <button class="floor-tab"        data-floor="1">Etage 2</button>
+      <button class="floor-tab"        data-floor="2">Etage 3</button>
+    </div>
+    <div class="sep"></div>
+
+    <!-- Tile tools -->
+    <div id="tools">
+      <button class="tool-btn active" id="tool-floor" data-tile="0">
+        <span class="swatch" style="background:#3a3f2e"></span>Boden
+      </button>
+      <button class="tool-btn" id="tool-wall" data-tile="1">
+        <span class="swatch" style="background:#6b7280"></span>Wand
+      </button>
+      <button class="tool-btn" id="tool-stair" data-tile="3">
+        <span class="swatch" style="background:#065f46"></span>Treppe
+      </button>
+    </div>
+    <div class="sep"></div>
+
+    <!-- Furniture tools -->
+    <div id="furn-tools">
+      <button class="furn-btn" id="tool-furn-blackboard"   data-furn="blackboard">🖼 Tafel</button>
+      <button class="furn-btn" id="tool-furn-teacher-desk" data-furn="teacher_desk">🪑 Lehrerpult</button>
+      <button class="furn-btn" id="tool-furn-student-desk" data-furn="student_desk">📚 Schülertisch</button>
+      <button class="furn-btn" id="tool-erase-furn">🗑 Möbel löschen</button>
+    </div>
+    <div class="sep"></div>
+
+    <!-- Actions -->
+    <div id="actions">
+      <span id="status">Bereit</span>
+      <button class="action-btn" id="btn-reset"   title="Aktuelle Etage auf Standard zurücksetzen">↺ Reset</button>
+      <button class="action-btn" id="btn-save"    title="Alle Etagen in IndexedDB speichern">💾 Speichern</button>
+      <button class="action-btn" id="btn-load"    title="Aus IndexedDB laden">📂 Laden</button>
+      <button class="action-btn" id="btn-copy-js" title="JS-Code kopieren">{ } JS</button>
+      <button class="action-btn" id="btn-play"    title="Spiel mit dieser Map öffnen">▶ Spielen</button>
+    </div>
+  </div>
+
+  <!-- ── Main ───────────────────────────────────────────── -->
+  <div id="main">
+    <div id="canvas-wrap">
+      <canvas id="map-canvas"></canvas>
+    </div>
+
+    <aside id="sidepanel">
+      <!-- Legend -->
+      <section>
+        <h2>Legende – Kacheln</h2>
+        <div class="legend-row">
+          <div class="legend-swatch" style="background:#3a3f2e"></div>0 – Boden
+        </div>
+        <div class="legend-row">
+          <div class="legend-swatch" style="background:#6b7280"></div>1 – Wand
+        </div>
+        <div class="legend-row">
+          <div class="legend-swatch" style="background:#065f46"></div>3 – Treppe
+        </div>
+      </section>
+
+      <!-- Legend – Furniture -->
+      <section>
+        <h2>Legende – Möbel</h2>
+        <div class="legend-row">
+          <div class="legend-swatch" style="background:#1b5e20"></div>🖼 Tafel
+        </div>
+        <div class="legend-row">
+          <div class="legend-swatch" style="background:#8d6e63"></div>🪑 Lehrerpult
+        </div>
+        <div class="legend-row">
+          <div class="legend-swatch" style="background:#d7ccc8; border-color:#888"></div>📚 Schülertisch
+        </div>
+      </section>
+
+      <!-- Cursor position -->
+      <section>
+        <h2>Cursor</h2>
+        <div class="coord-box">
+          Spalte: <span id="info-col">–</span><br>
+          Reihe: <span id="info-row">–</span><br>
+          Kachel: <span id="info-tile">–</span>
+        </div>
+      </section>
+
+      <!-- Stats -->
+      <section>
+        <h2>Statistik</h2>
+        <div class="coord-box">
+          Wände: <span id="stat-wall">–</span><br>
+          Böden: <span id="stat-floor">–</span><br>
+          Treppen: <span id="stat-stair">–</span><br>
+          Möbel: <span id="stat-furn">–</span>
+        </div>
+      </section>
+
+      <!-- JS export -->
+      <section id="js-output-wrap">
+        <h2>JS-Export (aktuelle Etage)</h2>
+        <textarea id="js-output" readonly placeholder="Klicke '{ } JS' um den Code zu generieren…"></textarea>
+      </section>
+    </aside>
+  </div>
+
+  <!-- Toast notification -->
+  <div id="toast"></div>
+
+  <script src="js/config.js"></script>
+  <script src="js/mapData.js"></script>
+  <script src="js/editor.js"></script>
+</body>
+</html>

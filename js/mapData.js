@@ -3,7 +3,7 @@
 //
 //  T_FLOOR = 0   (walkable)
 //  T_WALL  = 1   (solid – blocks movement + LOS)
-//  T_HIDE  = 2   (locker/desk – player can hide)
+//  T_STAIRS = 3  (staircase tile)
 //
 //  Layout:
 //   Row 0 / 19          : border walls
@@ -21,12 +21,8 @@
 // Door openings break the horizontal wall at col 4 (left room) and col 15 (mid room) and col 26 (right room)
 const _WR = [1,1,1,1,0,1,1,1,1,0,0,1,1,1,1,0,1,1,1,1,1,0,0,1,1,1,0,1,1,1,1,1];
 
-// Interior row WITH vertical dividers (no hiding spots)
+// Interior row WITH vertical dividers (plain – no hiding spots)
 const _IR = [1,0,0,0,0,0,0,0,1,0,0,1,0,0,0,0,0,0,0,0,1,0,0,1,0,0,0,0,0,0,0,1];
-
-// Interior row with HIDING SPOTS
-const _H1 = [1,0,2,0,2,0,2,0,1,0,0,1,0,2,0,2,0,2,0,0,1,0,0,1,0,2,0,2,0,2,0,1];
-const _H2 = [1,0,0,2,0,0,2,0,1,0,0,1,0,0,2,0,0,2,0,0,1,0,0,1,0,0,2,0,0,2,0,1];
 
 // Door row – ALL vertical dividers removed for passage (cols 8,11,20,23 become floor)
 const _DR = [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1];
@@ -38,42 +34,37 @@ const _CR = [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1];
 const _BR = [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1];
 
 // Base (ground) floor map – used as floor 0
+// Each row is explicitly sliced so LEVEL_MAP_0 owns its own copies
+// (the _WR/_CR/… constants are shared templates and must not be mutated).
 const LEVEL_MAP_0 = [
-  _BR, // row  0 – top border
-  _CR, // row  1 – top horizontal corridor
-  _WR, // row  2 – north wall of upper classrooms
-  _IR, // row  3 – upper classroom interior
-  _H1, // row  4 – upper classroom interior (hiding spots set A)
-  _DR, // row  5 – door row (all vertical dividers open)
-  _H2, // row  6 – upper classroom interior (hiding spots set B)
-  _IR, // row  7 – upper classroom interior
-  _WR, // row  8 – south wall of upper classrooms
-  _CR, // row  9 – middle corridor top
-  _CR, // row 10 – middle corridor bottom  (player spawns here)
-  _WR, // row 11 – north wall of lower classrooms
-  _IR, // row 12 – lower classroom interior
-  _H1, // row 13 – lower classroom (hiding spots A)
-  _DR, // row 14 – door row
-  _H2, // row 15 – lower classroom (hiding spots B)
-  _IR, // row 16 – lower classroom interior
-  _WR, // row 17 – south wall of lower classrooms
-  _CR, // row 18 – bottom horizontal corridor
-  _BR, // row 19 – bottom border
+  _BR.slice(), // row  0 – top border
+  _CR.slice(), // row  1 – top horizontal corridor
+  _WR.slice(), // row  2 – north wall of upper classrooms
+  _IR.slice(), // row  3 – upper classroom interior
+  _IR.slice(), // row  4 – upper classroom interior
+  _DR.slice(), // row  5 – door row (all vertical dividers open)
+  _IR.slice(), // row  6 – upper classroom interior
+  _IR.slice(), // row  7 – upper classroom interior
+  _WR.slice(), // row  8 – south wall of upper classrooms
+  _CR.slice(), // row  9 – middle corridor top
+  _CR.slice(), // row 10 – middle corridor bottom  (player spawns here)
+  _WR.slice(), // row 11 – north wall of lower classrooms
+  _IR.slice(), // row 12 – lower classroom interior
+  _IR.slice(), // row 13 – lower classroom interior
+  _DR.slice(), // row 14 – door row
+  _IR.slice(), // row 15 – lower classroom interior
+  _IR.slice(), // row 16 – lower classroom interior
+  _WR.slice(), // row 17 – south wall of lower classrooms
+  _CR.slice(), // row 18 – bottom horizontal corridor
+  _BR.slice(), // row 19 – bottom border
 ];
 
-// Helper to deep-clone a map definition
+// Helper to deep-clone a map definition (each row gets its own array copy)
 const _cloneMap = (m) => m.map((r) => r.slice());
 
-// Create two additional floors by slightly varying hiding-spot patterns
+// All floors start from the same clean map
 const LEVEL_MAP_1 = _cloneMap(LEVEL_MAP_0);
-// on floor 1, swap some hiding rows to create slightly different layout
-LEVEL_MAP_1[4] = _H2; // swap A/B sets
-LEVEL_MAP_1[6] = _H1;
-
 const LEVEL_MAP_2 = _cloneMap(LEVEL_MAP_0);
-// on floor 2, make corridor rows slightly different (mirror corridor rows)
-LEVEL_MAP_2[1] = _CR;
-LEVEL_MAP_2[9] = _CR;
 
 // Aggregate floors
 const LEVEL_MAPS = [LEVEL_MAP_0, LEVEL_MAP_1, LEVEL_MAP_2];
@@ -88,8 +79,49 @@ const STAIR_POS = { col: 15, row: 9 };
 let LEVEL_MAP = LEVEL_MAPS[0];
 
 // ─────────────────────────────────────────────
-//  Spawn positions and teacher defs per floor
+//  Furniture layout – per floor array of {type, col, row}
+//  types: 'blackboard' | 'teacher_desk' | 'student_desk'
+//  Default layout mirrors the old auto-generated classroom setup.
 // ─────────────────────────────────────────────
+
+// Helper: generate a default classroom furniture set for a room definition
+function _defaultRoomFurniture(colMin, colMax, rowMin, rowMax) {
+  const items = [];
+  const cx = Math.round((colMin + colMax) / 2);
+
+  // Blackboard on north wall row
+  items.push({ type: 'blackboard',   col: cx,       row: rowMin });
+  // Teacher desk one row south of blackboard
+  items.push({ type: 'teacher_desk', col: cx,       row: rowMin + 1 });
+
+  // Student desks filling the rest of the room
+  for (let r = rowMin + 2; r <= rowMax - 1; r++) {
+    for (let c = colMin + 1; c <= colMax - 1; c += 2) {
+      items.push({ type: 'student_desk', col: c, row: r });
+    }
+  }
+  return items;
+}
+
+// Upper classrooms: rowMin=3,rowMax=7  /  lower classrooms: rowMin=12,rowMax=16
+const _defaultFurniture = [
+  _defaultRoomFurniture(1,  7,  3, 7),   // UL
+  _defaultRoomFurniture(12, 19, 3, 7),   // UM
+  _defaultRoomFurniture(24, 30, 3, 7),   // UR
+  _defaultRoomFurniture(1,  7,  12, 16), // LL
+  _defaultRoomFurniture(12, 19, 12, 16), // LM
+  _defaultRoomFurniture(24, 30, 12, 16), // LR
+].reduce((a, b) => a.concat(b), []);
+
+// FURNITURE_LAYOUT[floorIndex] = array of {type, col, row}
+// All floors start with the same default; the editor can override per floor.
+const FURNITURE_LAYOUT = [
+  _defaultFurniture.map(f => Object.assign({}, f)),
+  _defaultFurniture.map(f => Object.assign({}, f)),
+  _defaultFurniture.map(f => Object.assign({}, f)),
+];
+
+
 const PLAYER_SPAWNS = [
   { col: 15, row: 10 }, // floor 0
   { col: 15, row: 10 }, // floor 1
@@ -202,6 +234,66 @@ function _addStairs(m) {
   }
 }
 LEVEL_MAPS.forEach(_addStairs);
+
+// ── Load custom map from editor ───────────────────────────────────────────────
+// The editor saves maps to IndexedDB (SchoolGameDB / maps / "floorMaps").
+// We read them here synchronously-ish: since IDB is async we patch LEVEL_MAPS
+// and rebuild the world once the data arrives, signalling via a custom event.
+(function _loadEditorMap() {
+  try {
+    const req = indexedDB.open('SchoolGameDB', 2);
+    req.onupgradeneeded = function(e) {
+      // Create the store if it doesn't exist yet (e.g. first run in game tab)
+      const d = e.target.result;
+      if (!d.objectStoreNames.contains('maps')) {
+        d.createObjectStore('maps');
+      }
+    };
+    req.onsuccess = function(e) {
+      try {
+        const db    = e.target.result;
+        const tx    = db.transaction('maps', 'readonly');
+        const store = tx.objectStore('maps');
+        const get   = store.get('floorMaps');
+        get.onsuccess = function(ev) {
+          const saved = ev.target.result;
+          if (!saved) return;
+
+          // Apply tile maps
+          const mapData = saved.maps;
+          if (Array.isArray(mapData) && mapData.length === LEVEL_MAPS.length) {
+            let changed = false;
+            mapData.forEach((floor, i) => {
+              if (Array.isArray(floor) && floor.length === ROWS) {
+                LEVEL_MAPS[i] = floor.map(row => Array.isArray(row) ? row.slice() : row);
+                changed = true;
+              }
+            });
+            if (changed) {
+              LEVEL_MAPS.forEach(_addStairs);
+              selectFloor(CURRENT_FLOOR);
+            }
+          }
+
+          // Apply furniture layout
+          const furnitureData = saved.furniture;
+          if (Array.isArray(furnitureData) && furnitureData.length === FURNITURE_LAYOUT.length) {
+            furnitureData.forEach((floor, i) => {
+              if (Array.isArray(floor)) FURNITURE_LAYOUT[i] = floor.slice();
+            });
+          }
+
+          console.log('[Editor] Map + Möbel aus IndexedDB geladen.');
+          window.dispatchEvent(new CustomEvent('editorMapLoaded'));
+        };
+      } catch(err) {
+        console.warn('Editor-Map IDB read error:', err);
+      }
+    };
+  } catch (e) {
+    console.warn('Editor-Map konnte nicht geladen werden:', e);
+  }
+})();
 
 // Initialise first floor
 selectFloor(0);
